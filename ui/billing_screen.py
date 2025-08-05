@@ -6,17 +6,15 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QComboBox, QSpinBox, QApplication, QCompleter
 )
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt, QStringListModel
+from PyQt6.QtCore import Qt, QStringListModel, pyqtSignal # Import pyqtSignal
 from models.medicine import Medicine
 from models.customer import Customer
 import json
 
 
 class BillingScreen(QWidget):
-    """
-    UI for managing sales and billing. Allows selecting medicines and customers,
-    adding items to a cart, calculating total, and processing sales.
-    """
+    # Define a signal that will be emitted when a sale is successfully processed
+    sale_processed = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -26,19 +24,16 @@ class BillingScreen(QWidget):
         self.setup_ui()
 
     def setup_ui(self):
-        """Sets up the layout and widgets for the billing screen."""
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
 
-        # --- Header Section ---
         header_label = QLabel("Billing System")
         header_label.setFont(QFont("Arial", 28, QFont.Weight.Bold))
         header_label.setStyleSheet("color: #2c3e50;")
         header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(header_label)
 
-        # --- Top Section: Customer & Medicine Selection ---
         top_frame = QFrame(self)
         top_frame.setStyleSheet("""
             QFrame {
@@ -78,7 +73,6 @@ class BillingScreen(QWidget):
         top_layout.setContentsMargins(25, 25, 25, 25)
         top_layout.setSpacing(20)
 
-        # Left Side: Medicine Search & Add to Cart
         medicine_selection_layout = QVBoxLayout()
         medicine_selection_layout.addWidget(QLabel("Select Medicine:"))
         self.medicine_search_input = QLineEdit(self)
@@ -87,7 +81,7 @@ class BillingScreen(QWidget):
         medicine_selection_layout.addWidget(self.medicine_search_input)
 
         self.available_medicines_table = QTableWidget(self)
-        self.available_medicines_table.setColumnCount(4)  # ID, Name, Price, Stock
+        self.available_medicines_table.setColumnCount(4)
         self.available_medicines_table.setHorizontalHeaderLabels(["ID", "Name", "Price", "Stock"])
         self.available_medicines_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.available_medicines_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -98,7 +92,7 @@ class BillingScreen(QWidget):
         add_to_cart_layout.addWidget(QLabel("Quantity:"))
         self.quantity_spinbox = QSpinBox(self)
         self.quantity_spinbox.setMinimum(1)
-        self.quantity_spinbox.setMaximum(999)  # Max reasonable quantity
+        self.quantity_spinbox.setMaximum(999)
         add_to_cart_layout.addWidget(self.quantity_spinbox)
         self.add_to_cart_button = self._create_button("Add to Cart", "#007bff", font_size=13, padding="8px 15px")
         self.add_to_cart_button.clicked.connect(self.add_selected_medicine_to_cart)
@@ -107,7 +101,6 @@ class BillingScreen(QWidget):
 
         top_layout.addLayout(medicine_selection_layout)
 
-        # Right Side: Customer Selection
         customer_selection_layout = QVBoxLayout()
         customer_selection_layout.addWidget(QLabel("Select Customer (Optional):"))
         self.customer_search_input = QLineEdit(self)
@@ -116,7 +109,7 @@ class BillingScreen(QWidget):
         customer_selection_layout.addWidget(self.customer_search_input)
 
         self.available_customers_table = QTableWidget(self)
-        self.available_customers_table.setColumnCount(3)  # ID, Name, Phone
+        self.available_customers_table.setColumnCount(3)
         self.available_customers_table.setHorizontalHeaderLabels(["ID", "Name", "Phone"])
         self.available_customers_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.available_customers_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -132,7 +125,6 @@ class BillingScreen(QWidget):
 
         main_layout.addWidget(top_frame)
 
-        # --- Middle Section: Cart & Totals ---
         cart_frame = QFrame(self)
         cart_frame.setStyleSheet("""
             QFrame {
@@ -167,7 +159,7 @@ class BillingScreen(QWidget):
         cart_layout.addWidget(cart_label)
 
         self.cart_table = QTableWidget(self)
-        self.cart_table.setColumnCount(5)  # ID, Name, Price, Quantity, Subtotal
+        self.cart_table.setColumnCount(5)
         self.cart_table.setHorizontalHeaderLabels(["ID", "Medicine", "Price", "Qty", "Subtotal"])
         self.cart_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.cart_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -202,7 +194,6 @@ class BillingScreen(QWidget):
 
         main_layout.addWidget(cart_frame)
 
-        # --- Bottom Section: Recent Sales History ---
         sales_history_frame = QFrame(self)
         sales_history_frame.setStyleSheet("""
             QFrame {
@@ -459,10 +450,11 @@ class BillingScreen(QWidget):
         if self.db_manager.add_sale(customer_id, customer_name, customer_phone, customer_email, total_amount,
                                     items_for_db):
             self.show_message("Sale Complete", f"Sale of {total_amount:.2f} processed successfully!")
-            self.clear_cart()  # Clear cart after successful sale
-            self.clear_customer_selection()  # Clear customer after successful sale
-            self.load_available_medicines()  # Refresh medicine stock display
-            self.load_sales_history()  # Refresh sales history
+            self.clear_cart()
+            self.clear_customer_selection()
+            self.load_available_medicines()
+            self.load_sales_history()
+            self.sale_processed.emit() # Emit signal after successful sale
         # Error messages handled by DBManager's add_sale method
 
     def load_sales_history(self):
@@ -477,7 +469,6 @@ class BillingScreen(QWidget):
             self.sales_history_table.setItem(row_idx, 2, QTableWidgetItem(f"{sale['total_amount']:.2f}"))
             self.sales_history_table.setItem(row_idx, 3, QTableWidgetItem(sale["sale_date"]))
 
-            # Display items in a readable format
             items_text = ", ".join([f"{item['name']} (x{item['qty']})" for item in sale["items"]])
             self.sales_history_table.setItem(row_idx, 4, QTableWidgetItem(items_text))
 
@@ -521,9 +512,10 @@ if __name__ == "__main__":
     from database.db_manager import DBManager
     from models.medicine import Medicine
     from models.customer import Customer
+    from datetime import datetime, timedelta # Import for dummy data
 
     app = QApplication(sys.argv)
-    db_manager = DBManager("test_pharmacy_billing.db")  # Use a test DB for standalone running
+    db_manager = DBManager("test_pharmacy_billing.db")
 
     # Add some dummy data for testing
     db_manager.add_medicine(
@@ -536,6 +528,6 @@ if __name__ == "__main__":
         Customer(name="Jane Smith", phone="987-654-3210", email="jane.smith@example.com", address="456 Oak Ave"))
 
     billing_screen = BillingScreen()
-    billing_screen.set_db_manager(db_manager)  # Pass the DB manager
+    billing_screen.set_db_manager(db_manager)
     billing_screen.showMaximized()
     sys.exit(app.exec())

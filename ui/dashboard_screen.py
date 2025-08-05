@@ -7,7 +7,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QIcon, QPixmap
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
-# Import placeholder screens (will be created below)
+# Import screens
+from ui.dashboard_content_screen import DashboardContentScreen # Ensure this is imported
 from ui.medicine_screen import MedicineScreen
 from ui.customer_screen import CustomerScreen
 from ui.billing_screen import BillingScreen
@@ -148,10 +149,7 @@ class DashboardScreen(QWidget):
         self.content_stacked_widget.setStyleSheet("background-color: #f8f9fa;") # Light background for content
 
         # Create instances of content screens
-        # Assuming DashboardContentScreen exists and is imported correctly
-        from ui.dashboard_content_screen import DashboardContentScreen
-        self.dashboard_content = DashboardContentScreen()
-
+        self.dashboard_content = DashboardContentScreen() # Correctly instantiate DashboardContentScreen
         self.medicines_content = MedicineScreen()
         self.customers_content = CustomerScreen()
         self.billing_content = BillingScreen()
@@ -177,9 +175,15 @@ class DashboardScreen(QWidget):
         self.active_button = None
         self.switch_screen(0, self.dashboard_button) # Show Dashboard content initially
 
-        # --- Connect data change signals to billing screen refresh methods ---
+        # --- Connect data change signals for auto-updates ---
+        # Connect medicine and customer data changes to billing screen refresh
         self.medicines_content.data_changed.connect(self.billing_content.load_available_medicines)
         self.customers_content.data_changed.connect(self.billing_content.load_available_customers)
+
+        # Connect data changes (medicine, customer, sales) to dashboard content refresh
+        self.medicines_content.data_changed.connect(self.dashboard_content.load_dashboard_stats)
+        self.customers_content.data_changed.connect(self.dashboard_content.load_dashboard_stats)
+        self.billing_content.sale_processed.connect(self.dashboard_content.load_dashboard_stats)
 
 
     def _create_sidebar_button(self, text, object_name):
@@ -190,9 +194,10 @@ class DashboardScreen(QWidget):
         return button
 
     def _create_placeholder_screen(self, text):
-        """Helper to create a simple placeholder widget for content areas."""
-        # This method is no longer strictly needed if DashboardContentScreen is imported
-        # but kept for compatibility with the original structure.
+        """Helper to create a simple placeholder widget for content areas.
+        This method is no longer strictly needed if DashboardContentScreen is imported
+        and used directly, but kept for compatibility with the original structure if desired.
+        """
         widget = QWidget()
         layout = QVBoxLayout(widget)
         label = QLabel(text)
@@ -205,8 +210,13 @@ class DashboardScreen(QWidget):
     def switch_screen(self, index, clicked_button):
         """
         Switches the content in the QStackedWidget and updates sidebar button styles.
+        Also triggers data refresh for the dashboard if it's being displayed.
         """
         self.content_stacked_widget.setCurrentIndex(index)
+
+        # If the dashboard screen is being shown, load its stats
+        if index == 0: # Index 0 is the dashboard_content
+            self.dashboard_content.load_dashboard_stats()
 
         # Update button styles
         if self.active_button:
@@ -226,11 +236,16 @@ class DashboardScreen(QWidget):
         self.user_email_label.setText(user_email)
 
     def set_db_manager(self, db_manager):
-        """Sets the DBManager instance and passes it to sub-screens."""
+        """Sets the DBManager instance and passes it to sub-screens.
+        Also triggers initial dashboard stats load.
+        """
         self.db_manager = db_manager
-        # Pass DBManager and load initial data for each content screen
+        # Pass DBManager to all content screens
+        self.dashboard_content.set_db_manager(db_manager) # Pass DBManager to dashboard content
         self.medicines_content.set_db_manager(db_manager)
         self.customers_content.set_db_manager(db_manager)
         self.billing_content.set_db_manager(db_manager)
-        # Assuming SettingsScreen has a db_manager attribute or set_db_manager method
         self.settings_content.db_manager = db_manager
+
+        # Ensure dashboard stats are loaded when DBManager is first set
+        self.dashboard_content.load_dashboard_stats()

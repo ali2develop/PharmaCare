@@ -3,12 +3,14 @@
 import sqlite3
 from PyQt6.QtWidgets import QMessageBox
 import bcrypt
-import json # Ensure json is imported
+import json  # Ensure json is imported
+from datetime import datetime, timedelta  # Import datetime and timedelta
 
 # Import models
 from models.user import User
 from models.medicine import Medicine
 from models.customer import Customer
+
 
 class DBManager:
     """
@@ -17,6 +19,7 @@ class DBManager:
     basic CRUD operations (Create, Read, Update, Delete), including user authentication,
     medicine management, customer management, login email history, and sales.
     """
+
     def __init__(self, db_name="pharmacy.db"):
         """
         Initializes the DBManager with the specified database name.
@@ -186,7 +189,8 @@ class DBManager:
         if not self.conn: return []
         try:
             cursor = self.conn.cursor()
-            cursor.execute("SELECT id, name, brand, category, price, stock, low_stock_alert, expiry_date, description, created_at FROM medicines ORDER BY name ASC")
+            cursor.execute(
+                "SELECT id, name, brand, category, price, stock, low_stock_alert, expiry_date, description, created_at FROM medicines ORDER BY name ASC")
             rows = cursor.fetchall()
             return [Medicine.from_db_row(row) for row in rows]
         except sqlite3.Error as e:
@@ -201,7 +205,9 @@ class DBManager:
         if not self.conn: return None
         try:
             cursor = self.conn.cursor()
-            cursor.execute("SELECT id, name, brand, category, price, stock, low_stock_alert, expiry_date, description, created_at FROM medicines WHERE id = ?", (medicine_id,))
+            cursor.execute(
+                "SELECT id, name, brand, category, price, stock, low_stock_alert, expiry_date, description, created_at FROM medicines WHERE id = ?",
+                (medicine_id,))
             row = cursor.fetchone()
             if row:
                 return Medicine.from_db_row(row)
@@ -256,12 +262,12 @@ class DBManager:
                 print(f"Medicine ID {medicine_id} stock updated to {new_stock}.")
                 return True
             else:
-                self.show_error_message("Stock Update Error", f"Medicine with ID {medicine_id} not found for stock update.")
+                self.show_error_message("Stock Update Error",
+                                        f"Medicine with ID {medicine_id} not found for stock update.")
                 return False
         except sqlite3.Error as e:
             self.show_error_message("Database Error", f"Failed to update medicine stock: {e}")
             return False
-
 
     def delete_medicine(self, medicine_id):
         """Deletes a medicine record from the 'medicines' table by its ID."""
@@ -323,7 +329,8 @@ class DBManager:
         if not self.conn: return None
         try:
             cursor = self.conn.cursor()
-            cursor.execute("SELECT id, name, phone, email, address, created_at FROM customers WHERE id = ?", (customer_id,))
+            cursor.execute("SELECT id, name, phone, email, address, created_at FROM customers WHERE id = ?",
+                           (customer_id,))
             row = cursor.fetchone()
             if row:
                 return Customer.from_db_row(row)
@@ -407,7 +414,7 @@ class DBManager:
             print(f"Error retrieving login emails: {e}")
             return []
 
-    # --- New: Sales Management Methods ---
+    # --- Sales Management Methods ---
 
     def add_sale(self, customer_id, customer_name, customer_phone, customer_email, total_amount, items):
         """
@@ -436,13 +443,13 @@ class DBManager:
             self.conn.execute("BEGIN TRANSACTION")
 
             # Insert sale record
-            items_json = json.dumps(items) # Convert items list to JSON string
+            items_json = json.dumps(items)  # Convert items list to JSON string
             cursor.execute(
                 """INSERT INTO sales (customer_id, customer_name, customer_phone, customer_email, total_amount, items_json)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (customer_id, customer_name, customer_phone, customer_email, total_amount, items_json)
             )
-            sale_id = cursor.lastrowid # Get the ID of the newly inserted sale
+            sale_id = cursor.lastrowid  # Get the ID of the newly inserted sale
 
             # Update medicine stock for each item sold
             for item in items:
@@ -456,19 +463,20 @@ class DBManager:
                 current_stock = current_stock_row[0]
                 new_stock = current_stock - qty_sold
                 if new_stock < 0:
-                    raise ValueError(f"Insufficient stock for medicine ID {med_id}. Available: {current_stock}, Requested: {qty_sold}")
+                    raise ValueError(
+                        f"Insufficient stock for medicine ID {med_id}. Available: {current_stock}, Requested: {qty_sold}")
 
                 cursor.execute("UPDATE medicines SET stock = ? WHERE id = ?", (new_stock, med_id))
 
-            self.conn.commit() # Commit the transaction
+            self.conn.commit()  # Commit the transaction
             print(f"Sale ID {sale_id} recorded successfully and stock updated.")
             return True
         except ValueError as ve:
-            self.conn.rollback() # Rollback if stock is insufficient
+            self.conn.rollback()  # Rollback if stock is insufficient
             self.show_error_message("Sale Error", str(ve))
             return False
         except sqlite3.Error as e:
-            self.conn.rollback() # Rollback on any other database error
+            self.conn.rollback()  # Rollback on any other database error
             self.show_error_message("Database Error", f"Failed to record sale: {e}")
             return False
 
@@ -484,7 +492,8 @@ class DBManager:
         if not self.conn: return []
         try:
             cursor = self.conn.cursor()
-            cursor.execute("SELECT id, customer_id, customer_name, customer_phone, customer_email, total_amount, sale_date, items_json FROM sales ORDER BY sale_date DESC")
+            cursor.execute(
+                "SELECT id, customer_id, customer_name, customer_phone, customer_email, total_amount, sale_date, items_json FROM sales ORDER BY sale_date DESC")
             rows = cursor.fetchall()
             sales_data = []
             for row in rows:
@@ -496,7 +505,7 @@ class DBManager:
                     "customer_email": row[4],
                     "total_amount": row[5],
                     "sale_date": row[6],
-                    "items": json.loads(row[7]) # Parse JSON string back to list
+                    "items": json.loads(row[7])  # Parse JSON string back to list
                 }
                 sales_data.append(sale_dict)
             return sales_data
@@ -504,6 +513,84 @@ class DBManager:
             self.show_error_message("Database Error", f"Failed to retrieve sales: {e}")
             return []
 
+    # --- New: Dashboard Statistics Methods ---
+
+    def get_total_medicines(self):
+        """
+        Returns the total number of unique medicines in the inventory.
+        """
+        if not self.conn: return 0
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT COUNT(id) FROM medicines")
+            return cursor.fetchone()[0]
+        except sqlite3.Error as e:
+            print(f"Error getting total medicines: {e}")
+            return 0
+
+    def get_total_customers(self):
+        """
+        Returns the total number of registered customers.
+        """
+        if not self.conn: return 0
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT COUNT(id) FROM customers")
+            return cursor.fetchone()[0]
+        except sqlite3.Error as e:
+            print(f"Error getting total customers: {e}")
+            return 0
+
+    def get_total_sales_amount(self):
+        """
+        Returns the sum of total_amount from all sales.
+        """
+        if not self.conn: return 0.0
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT SUM(total_amount) FROM sales")
+            total = cursor.fetchone()[0]
+            return total if total is not None else 0.0
+        except sqlite3.Error as e:
+            print(f"Error getting total sales amount: {e}")
+            return 0.0
+
+    def get_low_stock_medicines_count(self):
+        """
+        Returns the count of medicines where current stock is <= low_stock_alert.
+        """
+        if not self.conn: return 0
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT COUNT(id) FROM medicines WHERE stock <= low_stock_alert")
+            return cursor.fetchone()[0]
+        except sqlite3.Error as e:
+            print(f"Error getting low stock medicines count: {e}")
+            return 0
+
+    def get_expiring_medicines_count(self, days_threshold=30):
+        """
+        Returns the count of medicines expiring within a given number of days
+        or already expired.
+        Expiry date format is YYYY-MM-DD.
+        """
+        if not self.conn: return 0
+        try:
+            cursor = self.conn.cursor()
+            today = datetime.now().strftime('%Y-%m-%d')
+            future_date = (datetime.now() + timedelta(days=days_threshold)).strftime('%Y-%m-%d')
+
+            # Select medicines where expiry_date is less than or equal to future_date (within threshold)
+            # OR expiry_date is less than today (already expired)
+            # AND expiry_date is not NULL
+            cursor.execute("""
+                SELECT COUNT(id) FROM medicines
+                WHERE expiry_date IS NOT NULL AND (expiry_date <= ? OR expiry_date < ?)
+            """, (future_date, today))
+            return cursor.fetchone()[0]
+        except sqlite3.Error as e:
+            print(f"Error getting expiring medicines count: {e}")
+            return 0
 
     def show_error_message(self, title, message):
         """
@@ -516,22 +603,29 @@ class DBManager:
         msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg_box.exec()
 
+
 # Example usage (for testing DB connection and table creation)
 if __name__ == "__main__":
     from models.user import User
     from models.medicine import Medicine
     from models.customer import Customer
-    from PyQt6.QtWidgets import QApplication # For standalone test
+    from PyQt6.QtWidgets import QApplication  # For standalone test
 
-    app = QApplication([]) # Initialize QApplication for QMessageBox
-    db_manager = DBManager("test_pharmacy_full_sales.db") # Create a test database
+    app = QApplication([])  # Initialize QApplication for QMessageBox
+    db_manager = DBManager("test_pharmacy_full_sales_dashboard.db")  # Create a test database
 
     # Add some dummy data for testing
     print("\n--- Initializing Test Data ---")
     db_manager.add_user(User("Alice Smith", "alice@example.com", "password123"))
-    db_manager.add_medicine(Medicine("Paracetamol 500mg", "Tylenol", "Pain Relief", 5.50, 100, expiry_date="2025-12-31"))
-    db_manager.add_medicine(Medicine("Amoxicillin 250mg", "Amoxil", "Antibiotic", 12.75, 50, low_stock_alert=5, expiry_date="2024-10-15"))
-    db_manager.add_customer(Customer(name="John Doe", phone="123-456-7890", email="john.doe@example.com", address="123 Main St"))
+    db_manager.add_medicine(
+        Medicine("Paracetamol 500mg", "Tylenol", "Pain Relief", 5.50, 100, expiry_date="2025-12-31"))
+    db_manager.add_medicine(
+        Medicine("Amoxicillin 250mg", "Amoxil", "Antibiotic", 12.75, 50, low_stock_alert=5, expiry_date="2024-10-15"))
+    db_manager.add_medicine(Medicine("Expired Med", "Brand X", "Expired", 10.0, 5, expiry_date="2023-01-01"))
+    db_manager.add_medicine(
+        Medicine("Low Stock Med", "Brand Y", "Pain", 5.0, 2, low_stock_alert=5, expiry_date="2025-01-01"))
+    db_manager.add_customer(
+        Customer(name="John Doe", phone="123-456-7890", email="john.doe@example.com", address="123 Main St"))
 
     # Retrieve added items to get their IDs
     meds = db_manager.get_all_medicines()
@@ -563,7 +657,8 @@ if __name__ == "__main__":
             {"med_id": amoxicillin_id, "qty": 1, "price": 12.75, "name": "Amoxicillin 250mg"}
         ]
         total_sale1 = sum(item['qty'] * item['price'] for item in items_sale1)
-        if db_manager.add_sale(john_doe_id, "John Doe", "123-456-7890", "john.doe@example.com", total_sale1, items_sale1):
+        if db_manager.add_sale(john_doe_id, "John Doe", "123-456-7890", "john.doe@example.com", total_sale1,
+                               items_sale1):
             print(f"Sale 1 recorded for John Doe. Total: {total_sale1:.2f}")
         else:
             print("Sale 1 failed.")
@@ -578,30 +673,27 @@ if __name__ == "__main__":
         else:
             print("Sale 2 failed.")
 
-        # Test insufficient stock
-        items_sale3 = [
-            {"med_id": paracetamol_id, "qty": 200, "price": 5.50, "name": "Paracetamol 500mg"} # Should fail
-        ]
-        total_sale3 = sum(item['qty'] * item['price'] for item in items_sale3)
-        print("\nAttempting sale with insufficient stock...")
-        if db_manager.add_sale(None, "Problem Customer", "", "", total_sale3, items_sale3):
-            print("Sale 3 recorded (should have failed).")
-        else:
-            print("Sale 3 failed as expected due to insufficient stock.")
-
     else:
         print("Not enough initial data to run sales tests.")
-
 
     # Get all sales
     all_sales = db_manager.get_all_sales()
     print("\nAll Sales Records:")
     for sale in all_sales:
-        print(f"Sale ID: {sale['id']}, Customer: {sale['customer_name']}, Total: {sale['total_amount']:.2f}, Items: {sale['items']}")
+        print(
+            f"Sale ID: {sale['id']}, Customer: {sale['customer_name']}, Total: {sale['total_amount']:.2f}, Items: {sale['items']}")
 
     print("\n--- Current Medicine Stock After Sales ---")
     updated_meds = db_manager.get_all_medicines()
     for med in updated_meds:
         print(f"{med.name}: Stock = {med.stock}")
+
+    # --- Test Dashboard Statistics ---
+    print("\n--- Testing Dashboard Statistics ---")
+    print(f"Total Medicines: {db_manager.get_total_medicines()}")
+    print(f"Total Customers: {db_manager.get_total_customers()}")
+    print(f"Total Sales Amount: {db_manager.get_total_sales_amount():.2f}")
+    print(f"Low Stock Medicines: {db_manager.get_low_stock_medicines_count()}")
+    print(f"Expiring Medicines (30 days): {db_manager.get_expiring_medicines_count(30)}")
 
     db_manager.close_db()
