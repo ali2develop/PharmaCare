@@ -8,12 +8,12 @@ from PyQt6.QtGui import QFont, QIcon, QPixmap
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
 # Import screens
-from ui.dashboard_content_screen import DashboardContentScreen # Ensure this is imported
+from ui.dashboard_content_screen import DashboardContentScreen
 from ui.medicine_screen import MedicineScreen
 from ui.customer_screen import CustomerScreen
 from ui.billing_screen import BillingScreen
 from ui.settings_screen import SettingsScreen
-# No direct DBManager import here, it will be passed from MainWindow if needed by sub-screens
+from ui.reports_screen import ReportsScreen # NEW: Import ReportsScreen
 
 class DashboardScreen(QWidget):
     """
@@ -110,12 +110,14 @@ class DashboardScreen(QWidget):
         self.medicines_button = self._create_sidebar_button("💊 Medicines", "medicines")
         self.customers_button = self._create_sidebar_button("👥 Customers", "customers")
         self.billing_button = self._create_sidebar_button("🧾 Billing", "billing")
+        self.reports_button = self._create_sidebar_button("📈 Reports", "reports") # NEW: Reports Button
         self.settings_button = self._create_sidebar_button("⚙️ Settings", "settings")
 
         sidebar_layout.addWidget(self.dashboard_button)
         sidebar_layout.addWidget(self.medicines_button)
         sidebar_layout.addWidget(self.customers_button)
         sidebar_layout.addWidget(self.billing_button)
+        sidebar_layout.addWidget(self.reports_button) # NEW: Add Reports Button to layout
         sidebar_layout.addWidget(self.settings_button)
 
         sidebar_layout.addStretch() # Pushes buttons to the top
@@ -149,27 +151,30 @@ class DashboardScreen(QWidget):
         self.content_stacked_widget.setStyleSheet("background-color: #f8f9fa;") # Light background for content
 
         # Create instances of content screens
-        self.dashboard_content = DashboardContentScreen() # Correctly instantiate DashboardContentScreen
+        self.dashboard_content = DashboardContentScreen()
         self.medicines_content = MedicineScreen()
         self.customers_content = CustomerScreen()
         self.billing_content = BillingScreen()
+        self.reports_content = ReportsScreen() # NEW: Instantiate ReportsScreen
         self.settings_content = SettingsScreen()
 
-        # Add content screens to the stacked widget
+        # Add content screens to the stacked widget (adjusting indices)
         self.content_stacked_widget.addWidget(self.dashboard_content) # Index 0
         self.content_stacked_widget.addWidget(self.medicines_content) # Index 1
         self.content_stacked_widget.addWidget(self.customers_content) # Index 2
         self.content_stacked_widget.addWidget(self.billing_content)   # Index 3
-        self.content_stacked_widget.addWidget(self.settings_content) # Index 4
+        self.content_stacked_widget.addWidget(self.reports_content)   # NEW: Add ReportsScreen (Index 4)
+        self.content_stacked_widget.addWidget(self.settings_content) # Index 5 (shifted from 4)
 
         main_h_layout.addWidget(self.content_stacked_widget)
 
-        # Connect sidebar buttons to switch content
+        # Connect sidebar buttons to switch content (adjusting indices)
         self.dashboard_button.clicked.connect(lambda: self.switch_screen(0, self.dashboard_button))
         self.medicines_button.clicked.connect(lambda: self.switch_screen(1, self.medicines_button))
         self.customers_button.clicked.connect(lambda: self.switch_screen(2, self.customers_button))
         self.billing_button.clicked.connect(lambda: self.switch_screen(3, self.billing_button))
-        self.settings_button.clicked.connect(lambda: self.switch_screen(4, self.settings_button))
+        self.reports_button.clicked.connect(lambda: self.switch_screen(4, self.reports_button)) # NEW: Connect Reports button
+        self.settings_button.clicked.connect(lambda: self.switch_screen(5, self.settings_button)) # Adjusted index for settings
 
         # Set initial active button and screen
         self.active_button = None
@@ -210,13 +215,18 @@ class DashboardScreen(QWidget):
     def switch_screen(self, index, clicked_button):
         """
         Switches the content in the QStackedWidget and updates sidebar button styles.
-        Also triggers data refresh for the dashboard if it's being displayed.
+        Also triggers data refresh for the dashboard if it's being displayed,
+        and generates reports if the reports screen is displayed.
         """
         self.content_stacked_widget.setCurrentIndex(index)
 
         # If the dashboard screen is being shown, load its stats
         if index == 0: # Index 0 is the dashboard_content
             self.dashboard_content.load_dashboard_stats()
+        # If the reports screen is being shown, generate its default report
+        elif index == 4: # Index 4 is the reports_content
+            self.reports_content.generate_report()
+
 
         # Update button styles
         if self.active_button:
@@ -241,10 +251,11 @@ class DashboardScreen(QWidget):
         """
         self.db_manager = db_manager
         # Pass DBManager to all content screens
-        self.dashboard_content.set_db_manager(db_manager) # Pass DBManager to dashboard content
+        self.dashboard_content.set_db_manager(db_manager)
         self.medicines_content.set_db_manager(db_manager)
         self.customers_content.set_db_manager(db_manager)
         self.billing_content.set_db_manager(db_manager)
+        self.reports_content.set_db_manager(db_manager) # NEW: Pass DBManager to ReportsScreen
         self.settings_content.db_manager = db_manager
 
         # Ensure dashboard stats are loaded when DBManager is first set

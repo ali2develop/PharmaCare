@@ -3,8 +3,8 @@
 import sqlite3
 from PyQt6.QtWidgets import QMessageBox
 import bcrypt
-import json  # Ensure json is imported
-from datetime import datetime, timedelta  # Import datetime and timedelta
+import json
+from datetime import datetime, timedelta
 
 # Import models
 from models.user import User
@@ -513,7 +513,7 @@ class DBManager:
             self.show_error_message("Database Error", f"Failed to retrieve sales: {e}")
             return []
 
-    # --- New: Dashboard Statistics Methods ---
+    # --- Dashboard Statistics Methods ---
 
     def get_total_medicines(self):
         """
@@ -592,6 +592,110 @@ class DBManager:
             print(f"Error getting expiring medicines count: {e}")
             return 0
 
+    # --- New: Reporting System Methods ---
+
+    def get_sales_in_date_range(self, start_date_str, end_date_str):
+        """
+        Retrieves sales records within a specified date range (inclusive).
+
+        Args:
+            start_date_str (str): Start date in 'YYYY-MM-DD' format.
+            end_date_str (str): End date in 'YYYY-MM-DD' format.
+
+        Returns:
+            list: A list of dictionaries, each representing a sale,
+                  or an empty list on error/no data.
+        """
+        if not self.conn: return []
+        try:
+            cursor = self.conn.cursor()
+            # Ensure the end_date includes the entire day by adding a time component
+            # SQLite stores TIMESTAMPs as TEXT by default, so we compare strings.
+            # We assume sale_date is stored as 'YYYY-MM-DD HH:MM:SS' or similar.
+            # To include sales on the end_date, we compare against the next day's start.
+            end_date_obj = datetime.strptime(end_date_str, '%Y-%m-%d')
+            end_date_inclusive = (end_date_obj + timedelta(days=1)).strftime('%Y-%m-%d')
+
+            cursor.execute("""
+                SELECT id, customer_id, customer_name, customer_phone, customer_email, total_amount, sale_date, items_json
+                FROM sales
+                WHERE sale_date BETWEEN ? AND ?
+                ORDER BY sale_date DESC
+            """, (start_date_str, end_date_inclusive))  # Use < for exclusive end date
+
+            rows = cursor.fetchall()
+            sales_data = []
+            for row in rows:
+                sale_dict = {
+                    "id": row[0],
+                    "customer_id": row[1],
+                    "customer_name": row[2],
+                    "customer_phone": row[3],
+                    "customer_email": row[4],
+                    "total_amount": row[5],
+                    "sale_date": row[6],
+                    "items": json.loads(row[7])
+                }
+                sales_data.append(sale_dict)
+            return sales_data
+        except sqlite3.Error as e:
+            self.show_error_message("Database Error", f"Failed to retrieve sales report: {e}")
+            return []
+        except Exception as e:
+            self.show_error_message("Date Parsing Error", f"Invalid date format or range: {e}")
+            return []
+
+    def get_all_low_stock_medicines(self):
+        """
+        Retrieves all medicines where current stock is less than or equal to low_stock_alert.
+
+        Returns:
+            list: A list of Medicine objects, or an empty list on error/no data.
+        """
+        if not self.conn: return []
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                SELECT id, name, brand, category, price, stock, low_stock_alert, expiry_date, description, created_at
+                FROM medicines
+                WHERE stock <= low_stock_alert
+                ORDER BY stock ASC, name ASC
+            """)
+            rows = cursor.fetchall()
+            return [Medicine.from_db_row(row) for row in rows]
+        except sqlite3.Error as e:
+            self.show_error_message("Database Error", f"Failed to retrieve low stock medicines: {e}")
+            return []
+
+    def get_all_expiring_medicines(self, days_threshold=90):
+        """
+        Retrieves all medicines expiring within a given number of days from today,
+        or medicines that have already expired.
+
+        Args:
+            days_threshold (int): Number of days from today to consider as "expiring soon".
+
+        Returns:
+            list: A list of Medicine objects, or an empty list on error/no data.
+        """
+        if not self.conn: return []
+        try:
+            cursor = self.conn.cursor()
+            today = datetime.now().strftime('%Y-%m-%d')
+            future_date = (datetime.now() + timedelta(days=days_threshold)).strftime('%Y-%m-%d')
+
+            cursor.execute("""
+                SELECT id, name, brand, category, price, stock, low_stock_alert, expiry_date, description, created_at
+                FROM medicines
+                WHERE expiry_date IS NOT NULL AND (expiry_date <= ? OR expiry_date < ?)
+                ORDER BY expiry_date ASC, name ASC
+            """, (future_date, today))
+            rows = cursor.fetchall()
+            return [Medicine.from_db_row(row) for row in rows]
+        except sqlite3.Error as e:
+            self.show_error_message("Database Error", f"Failed to retrieve expiring medicines: {e}")
+            return []
+
     def show_error_message(self, title, message):
         """
         Displays an error message box to the user.
@@ -612,7 +716,7 @@ if __name__ == "__main__":
     from PyQt6.QtWidgets import QApplication  # For standalone test
 
     app = QApplication([])  # Initialize QApplication for QMessageBox
-    db_manager = DBManager("test_pharmacy_full_sales_dashboard.db")  # Create a test database
+    db_manager = DBManager("test_pharmacy_full_sales_dashboard_reports.db")  # Create a test database
 
     # Add some dummy data for testing
     print("\n--- Initializing Test Data ---")
@@ -624,6 +728,8 @@ if __name__ == "__main__":
     db_manager.add_medicine(Medicine("Expired Med", "Brand X", "Expired", 10.0, 5, expiry_date="2023-01-01"))
     db_manager.add_medicine(
         Medicine("Low Stock Med", "Brand Y", "Pain", 5.0, 2, low_stock_alert=5, expiry_date="2025-01-01"))
+    db_manager.add_medicine(Medicine("Expiring Soon Med", "Brand Z", "Supplement", 15.0, 10,
+                                     expiry_date=(datetime.now() + timedelta(days=10)).strftime('%Y-%m-%d')))
     db_manager.add_customer(
         Customer(name="John Doe", phone="123-456-7890", email="john.doe@example.com", address="123 Main St"))
 
@@ -673,6 +779,18 @@ if __name__ == "__main__":
         else:
             print("Sale 2 failed.")
 
+        # Add a sale for a specific date for testing reports
+        past_date_sale_items = [{"med_id": paracetamol_id, "qty": 3, "price": 5.50, "name": "Paracetamol 500mg"}]
+        past_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
+        db_manager.conn.execute(
+            """INSERT INTO sales (customer_id, customer_name, customer_phone, customer_email, total_amount, sale_date, items_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (john_doe_id, "John Doe", "123-456-7890", "john.doe@example.com", 16.50, past_date,
+             json.dumps(past_date_sale_items))
+        )
+        db_manager.conn.commit()
+        print(f"Past dated sale recorded for John Doe on {past_date}.")
+
     else:
         print("Not enough initial data to run sales tests.")
 
@@ -695,5 +813,25 @@ if __name__ == "__main__":
     print(f"Total Sales Amount: {db_manager.get_total_sales_amount():.2f}")
     print(f"Low Stock Medicines: {db_manager.get_low_stock_medicines_count()}")
     print(f"Expiring Medicines (30 days): {db_manager.get_expiring_medicines_count(30)}")
+
+    # --- Test Reporting Methods ---
+    print("\n--- Testing Reporting Methods ---")
+    sales_last_30_days = db_manager.get_sales_in_date_range(
+        (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+        datetime.now().strftime('%Y-%m-%d')
+    )
+    print(f"Sales in last 30 days: {len(sales_last_30_days)} records")
+    for sale in sales_last_30_days:
+        print(f"  - Sale ID: {sale['id']}, Date: {sale['sale_date']}, Total: {sale['total_amount']:.2f}")
+
+    low_stock_meds = db_manager.get_all_low_stock_medicines()
+    print(f"All Low Stock Medicines: {len(low_stock_meds)} records")
+    for med in low_stock_meds:
+        print(f"  - {med.name} (Stock: {med.stock}, Alert: {med.low_stock_alert})")
+
+    expiring_meds = db_manager.get_all_expiring_medicines(days_threshold=90)
+    print(f"All Expiring/Expired Medicines (90 days): {len(expiring_meds)} records")
+    for med in expiring_meds:
+        print(f"  - {med.name} (Expiry: {med.expiry_date})")
 
     db_manager.close_db()
