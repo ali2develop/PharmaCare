@@ -5,10 +5,8 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QFrame,
     QSizePolicy, QComboBox, QSpinBox, QApplication, QCompleter
 )
-from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt, QStringListModel, pyqtSignal # Import pyqtSignal
-from models.medicine import Medicine
-from models.customer import Customer
+from PyQt6.QtGui import QFont, QDoubleValidator # Import QDoubleValidator for numeric input
+from PyQt6.QtCore import Qt, QStringListModel, pyqtSignal
 import json
 
 
@@ -22,6 +20,9 @@ class BillingScreen(QWidget):
         self.cart_items = []
         self.selected_customer = None
         self.setup_ui()
+        # Initialize discount and tax values
+        self.discount_percentage = 0.0
+        self.tax_percentage = 0.0
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -149,6 +150,16 @@ class BillingScreen(QWidget):
                 font-weight: bold;
                 color: #34495e;
             }
+            QLineEdit {
+                border: 1px solid #cccccc;
+                border-radius: 8px;
+                padding: 8px;
+                font-size: 13px;
+                background-color: #f8f8f8;
+            }
+            QLineEdit:focus {
+                border: 2px solid #007bff;
+            }
         """)
         cart_layout = QVBoxLayout(cart_frame)
         cart_layout.setContentsMargins(25, 25, 25, 25)
@@ -177,16 +188,80 @@ class BillingScreen(QWidget):
         cart_buttons_layout.addStretch()
         cart_layout.addLayout(cart_buttons_layout)
 
-        total_layout = QHBoxLayout()
-        total_layout.addStretch()
-        total_label = QLabel("Total Amount:")
-        total_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
-        self.total_amount_label = QLabel("0.00")
-        self.total_amount_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
-        self.total_amount_label.setStyleSheet("color: #28a745;")
-        total_layout.addWidget(total_label)
-        total_layout.addWidget(self.total_amount_label)
-        cart_layout.addLayout(total_layout)
+        # --- NEW: Subtotal, Discount, Tax, and Grand Total ---
+        cart_layout.addSpacing(15) # Add spacing before totals
+
+        # Subtotal
+        subtotal_layout = QHBoxLayout()
+        subtotal_layout.addStretch()
+        subtotal_label = QLabel("Subtotal:")
+        subtotal_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        self.subtotal_amount_label = QLabel("0.00")
+        self.subtotal_amount_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        subtotal_layout.addWidget(subtotal_label)
+        subtotal_layout.addWidget(self.subtotal_amount_label)
+        cart_layout.addLayout(subtotal_layout)
+
+        # Discount Input
+        discount_layout = QHBoxLayout()
+        discount_layout.addStretch()
+        discount_label = QLabel("Discount (%):")
+        discount_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        self.discount_input = QLineEdit(self)
+        self.discount_input.setFixedWidth(80)
+        self.discount_input.setValidator(QDoubleValidator(0.0, 100.0, 2)) # 0-100%
+        self.discount_input.setText("0.00")
+        self.discount_input.textChanged.connect(self.calculate_total_amount)
+        self.discount_amount_label = QLabel("0.00") # To show calculated discount amount
+        self.discount_amount_label.setFont(QFont("Arial", 14))
+        discount_layout.addWidget(discount_label)
+        discount_layout.addWidget(self.discount_input)
+        discount_layout.addWidget(QLabel("(-)")) # Indicator for deduction
+        discount_layout.addWidget(self.discount_amount_label)
+        cart_layout.addLayout(discount_layout)
+
+        # Tax Input
+        tax_layout = QHBoxLayout()
+        tax_layout.addStretch()
+        tax_label = QLabel("Tax (%):")
+        tax_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        self.tax_input = QLineEdit(self)
+        self.tax_input.setFixedWidth(80)
+        self.tax_input.setValidator(QDoubleValidator(0.0, 100.0, 2)) # 0-100%
+        self.tax_input.setText("0.00")
+        self.tax_input.textChanged.connect(self.calculate_total_amount)
+        self.tax_amount_label = QLabel("0.00") # To show calculated tax amount
+        self.tax_amount_label.setFont(QFont("Arial", 14))
+        tax_layout.addWidget(tax_label)
+        tax_layout.addWidget(self.tax_input)
+        tax_layout.addWidget(QLabel("(+)")) # Indicator for addition
+        tax_layout.addWidget(self.tax_amount_label)
+        cart_layout.addLayout(tax_layout)
+
+        # Grand Total
+        grand_total_layout = QHBoxLayout()
+        grand_total_layout.addStretch()
+        grand_total_label = QLabel("Grand Total:")
+        grand_total_label.setFont(QFont("Arial", 20, QFont.Weight.Bold))
+        self.grand_total_amount_label = QLabel("0.00")
+        self.grand_total_amount_label.setFont(QFont("Arial", 20, QFont.Weight.Bold))
+        self.grand_total_amount_label.setStyleSheet("color: #28a745;") # Green for grand total
+        grand_total_layout.addWidget(grand_total_label)
+        grand_total_layout.addWidget(self.grand_total_amount_label)
+        cart_layout.addLayout(grand_total_layout)
+
+        # Original Total Amount Label (now unused, but keeping for reference if needed)
+        # total_layout = QHBoxLayout()
+        # total_layout.addStretch()
+        # total_label = QLabel("Total Amount:")
+        # total_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        # self.total_amount_label = QLabel("0.00")
+        # self.total_amount_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        # self.total_amount_label.setStyleSheet("color: #28a745;")
+        # total_layout.addWidget(total_label)
+        # total_layout.addWidget(self.total_amount_label)
+        # cart_layout.addLayout(total_layout)
+
 
         self.process_sale_button = self._create_button("Process Sale", "#28a745")
         self.process_sale_button.clicked.connect(self.process_sale)
@@ -238,6 +313,10 @@ class BillingScreen(QWidget):
 
         self.setStyleSheet("background-color: #f0f2f5;")
 
+        # Initial calculation when UI is set up
+        self.calculate_total_amount()
+
+
     def _create_button(self, text, color, font_size=14, padding="12px 25px"):
         """Helper to create a styled QPushButton."""
         button = QPushButton(text)
@@ -276,6 +355,7 @@ class BillingScreen(QWidget):
         self.load_available_medicines()
         self.load_available_customers()
         self.load_sales_history()
+        self.calculate_total_amount() # Ensure totals are calculated on DB load
 
     def load_available_medicines(self):
         """Loads all medicines from the database into the available medicines table."""
@@ -344,7 +424,7 @@ class BillingScreen(QWidget):
             })
 
         self.update_cart_display()
-        self.calculate_total_amount()
+        self.calculate_total_amount() # Recalculate all totals
         self.available_medicines_table.clearSelection()
 
     def update_cart_display(self):
@@ -369,19 +449,47 @@ class BillingScreen(QWidget):
         row_idx = selected_rows[0].row()
         del self.cart_items[row_idx]
         self.update_cart_display()
-        self.calculate_total_amount()
+        self.calculate_total_amount() # Recalculate all totals
 
     def clear_cart(self):
         """Clears all items from the shopping cart."""
         self.cart_items = []
         self.update_cart_display()
-        self.calculate_total_amount()
+        self.calculate_total_amount() # Recalculate all totals
         self.show_message("Cart Cleared", "Shopping cart has been cleared.")
 
     def calculate_total_amount(self):
-        """Calculates and displays the total amount of items in the cart."""
-        total = sum(item["subtotal"] for item in self.cart_items)
-        self.total_amount_label.setText(f"{total:.2f}")
+        """Calculates and displays the subtotal, discount, tax, and grand total."""
+        subtotal = sum(item["subtotal"] for item in self.cart_items)
+        self.subtotal_amount_label.setText(f"{subtotal:.2f}")
+
+        # Get discount and tax percentages from input fields
+        try:
+            self.discount_percentage = float(self.discount_input.text())
+        except ValueError:
+            self.discount_percentage = 0.0
+            self.discount_input.setText("0.00") # Reset to default if invalid
+
+        try:
+            self.tax_percentage = float(self.tax_input.text())
+        except ValueError:
+            self.tax_percentage = 0.0
+            self.tax_input.setText("0.00") # Reset to default if invalid
+
+        # Calculate discount amount
+        discount_amount = subtotal * (self.discount_percentage / 100.0)
+        self.discount_amount_label.setText(f"{discount_amount:.2f}")
+
+        # Calculate amount after discount
+        amount_after_discount = subtotal - discount_amount
+
+        # Calculate tax amount
+        tax_amount = amount_after_discount * (self.tax_percentage / 100.0)
+        self.tax_amount_label.setText(f"{tax_amount:.2f}")
+
+        # Calculate grand total
+        grand_total = amount_after_discount + tax_amount
+        self.grand_total_amount_label.setText(f"{grand_total:.2f}")
 
     def load_available_customers(self):
         """Loads all customers from the database into the available customers table."""
@@ -433,7 +541,8 @@ class BillingScreen(QWidget):
             self.show_message("Sale Error", "The cart is empty. Please add medicines to proceed.")
             return
 
-        total_amount = float(self.total_amount_label.text())
+        # Use the grand total from the label
+        final_total_amount = float(self.grand_total_amount_label.text())
 
         customer_id = self.selected_customer.id if self.selected_customer else None
         customer_name = self.selected_customer.name if self.selected_customer else "Walk-in Customer"
@@ -441,15 +550,17 @@ class BillingScreen(QWidget):
         customer_email = self.selected_customer.email if self.selected_customer else ""
 
         # Prepare items for DB: [{"med_id": int, "qty": int, "price": float, "name": str}]
-        # Ensure 'name' is included for sales history readability
         items_for_db = [
             {"med_id": item["med_id"], "qty": item["qty"], "price": item["price"], "name": item["name"]}
             for item in self.cart_items
         ]
 
-        if self.db_manager.add_sale(customer_id, customer_name, customer_phone, customer_email, total_amount,
+        # In a more advanced system, you might also want to store discount and tax percentages
+        # with the sale record in the database. For now, we just pass the final total.
+
+        if self.db_manager.add_sale(customer_id, customer_name, customer_phone, customer_email, final_total_amount,
                                     items_for_db):
-            self.show_message("Sale Complete", f"Sale of {total_amount:.2f} processed successfully!")
+            self.show_message("Sale Complete", f"Sale of {final_total_amount:.2f} processed successfully!")
             self.clear_cart()
             self.clear_customer_selection()
             self.load_available_medicines()
@@ -512,7 +623,7 @@ if __name__ == "__main__":
     from database.db_manager import DBManager
     from models.medicine import Medicine
     from models.customer import Customer
-    from datetime import datetime, timedelta # Import for dummy data
+    from datetime import datetime, timedelta
 
     app = QApplication(sys.argv)
     db_manager = DBManager("test_pharmacy_billing.db")
