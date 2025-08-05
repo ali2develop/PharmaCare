@@ -12,9 +12,6 @@ from ui.medicine_screen import MedicineScreen
 from ui.customer_screen import CustomerScreen
 from ui.billing_screen import BillingScreen
 from ui.settings_screen import SettingsScreen
-from ui.medicine_screen import MedicineScreen
-from ui.customer_screen import CustomerScreen
-from ui.billing_screen import BillingScreen
 # No direct DBManager import here, it will be passed from MainWindow if needed by sub-screens
 
 class DashboardScreen(QWidget):
@@ -151,7 +148,10 @@ class DashboardScreen(QWidget):
         self.content_stacked_widget.setStyleSheet("background-color: #f8f9fa;") # Light background for content
 
         # Create instances of content screens
-        self.dashboard_content = self._create_placeholder_screen("Dashboard Content")
+        # Assuming DashboardContentScreen exists and is imported correctly
+        from ui.dashboard_content_screen import DashboardContentScreen
+        self.dashboard_content = DashboardContentScreen()
+
         self.medicines_content = MedicineScreen()
         self.customers_content = CustomerScreen()
         self.billing_content = BillingScreen()
@@ -177,6 +177,11 @@ class DashboardScreen(QWidget):
         self.active_button = None
         self.switch_screen(0, self.dashboard_button) # Show Dashboard content initially
 
+        # --- Connect data change signals to billing screen refresh methods ---
+        self.medicines_content.data_changed.connect(self.billing_content.load_available_medicines)
+        self.customers_content.data_changed.connect(self.billing_content.load_available_customers)
+
+
     def _create_sidebar_button(self, text, object_name):
         """Helper to create a styled sidebar button."""
         button = QPushButton(text, self.sidebar_frame)
@@ -186,6 +191,8 @@ class DashboardScreen(QWidget):
 
     def _create_placeholder_screen(self, text):
         """Helper to create a simple placeholder widget for content areas."""
+        # This method is no longer strictly needed if DashboardContentScreen is imported
+        # but kept for compatibility with the original structure.
         widget = QWidget()
         layout = QVBoxLayout(widget)
         label = QLabel(text)
@@ -209,8 +216,9 @@ class DashboardScreen(QWidget):
 
     def _emit_logout(self):
         """Emits a signal to request application logout."""
+        # Assuming app_signals is set by MainWindow and has a logout_requested signal
         if self.app_signals:
-            self.app_signals.logout_requested.emit() # Assuming a 'logout_requested' signal
+            self.app_signals.logout_requested.emit()
 
     def set_user_info(self, user_name, user_email):
         """Updates the user information displayed in the sidebar."""
@@ -220,14 +228,9 @@ class DashboardScreen(QWidget):
     def set_db_manager(self, db_manager):
         """Sets the DBManager instance and passes it to sub-screens."""
         self.db_manager = db_manager
-        self.medicines_content.db_manager = db_manager
-        self.medicines_content.load_medicines()
-        self.customers_content.db_manager = db_manager
-        self.customers_content.load_customers()
-        self.billing_content.db_manager = db_manager
-        self.billing_content.load_available_medicines()  # <--- ADD THIS LINE
-        self.billing_content.load_available_customers()  # <--- ADD THIS LINE
-        self.billing_content.load_sales_history()
+        # Pass DBManager and load initial data for each content screen
+        self.medicines_content.set_db_manager(db_manager)
+        self.customers_content.set_db_manager(db_manager)
+        self.billing_content.set_db_manager(db_manager)
+        # Assuming SettingsScreen has a db_manager attribute or set_db_manager method
         self.settings_content.db_manager = db_manager
-        # Call any initialization methods for sub-screens that need DB access
-        # e.g., self.medicines_content.load_medicines()

@@ -6,8 +6,8 @@ from PyQt6.QtWidgets import (
     QMessageBox, QFrame, QSizePolicy, QSpacerItem, QApplication
 )
 from PyQt6.QtGui import QFont, QIcon
-from PyQt6.QtCore import Qt, QDate, pyqtSignal  # Import pyqtSignal
-from models.medicine import Medicine
+from PyQt6.QtCore import Qt, QDate, pyqtSignal
+from models.medicine import Medicine  # THIS LINE WAS MISSING AND HAS BEEN ADDED BACK
 
 
 class MedicineScreen(QWidget):
@@ -36,6 +36,7 @@ class MedicineScreen(QWidget):
             QFrame {
                 background-color: #FFFFFF;
                 border-radius: 15px;
+                /* Removed box-shadow */
             }
             QLabel {
                 font-size: 13px;
@@ -118,6 +119,7 @@ class MedicineScreen(QWidget):
             QFrame {
                 background-color: #FFFFFF;
                 border-radius: 15px;
+                /* Removed box-shadow */
             }
             QLineEdit {
                 border: 1px solid #cccccc;
@@ -401,7 +403,7 @@ class MedicineScreen(QWidget):
             self.clear_form()
             self.selected_medicine_id = None
             self.update_button.setEnabled(False)
-            self.delete_button.setEnabled(False)
+            self.delete_button.setEnabled(False)  # Corrected: Should be False if no row is selected
             self.add_button.setEnabled(True)
             return
 

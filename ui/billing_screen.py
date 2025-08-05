@@ -3,13 +3,13 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QFrame,
-    QSizePolicy, QComboBox, QSpinBox, QApplication, QCompleter  # Added QCompleter
+    QSizePolicy, QComboBox, QSpinBox, QApplication, QCompleter
 )
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, QStringListModel
 from models.medicine import Medicine
 from models.customer import Customer
-import json  # For handling items_json in sales
+import json
 
 
 class BillingScreen(QWidget):
@@ -20,9 +20,9 @@ class BillingScreen(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.db_manager = None  # Will be set by DashboardScreen
-        self.cart_items = []  # Stores items currently in the cart: [{"med_id": id, "name": name, "price": price, "qty": qty, "subtotal": subtotal}]
-        self.selected_customer = None  # Stores the selected Customer object
+        self.db_manager = None
+        self.cart_items = []
+        self.selected_customer = None
         self.setup_ui()
 
     def setup_ui(self):
@@ -191,12 +191,12 @@ class BillingScreen(QWidget):
         total_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
         self.total_amount_label = QLabel("0.00")
         self.total_amount_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
-        self.total_amount_label.setStyleSheet("color: #28a745;")  # Green for total
+        self.total_amount_label.setStyleSheet("color: #28a745;")
         total_layout.addWidget(total_label)
         total_layout.addWidget(self.total_amount_label)
         cart_layout.addLayout(total_layout)
 
-        self.process_sale_button = self._create_button("Process Sale", "#28a745")  # Green
+        self.process_sale_button = self._create_button("Process Sale", "#28a745")
         self.process_sale_button.clicked.connect(self.process_sale)
         cart_layout.addWidget(self.process_sale_button)
 
@@ -237,7 +237,7 @@ class BillingScreen(QWidget):
         sales_history_layout.addWidget(sales_history_label)
 
         self.sales_history_table = QTableWidget(self)
-        self.sales_history_table.setColumnCount(5)  # ID, Customer, Total, Date, Items
+        self.sales_history_table.setColumnCount(5)
         self.sales_history_table.setHorizontalHeaderLabels(
             ["Sale ID", "Customer", "Total Amount", "Date", "Items Sold"])
         self.sales_history_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -354,7 +354,7 @@ class BillingScreen(QWidget):
 
         self.update_cart_display()
         self.calculate_total_amount()
-        self.available_medicines_table.clearSelection()  # Clear selection after adding
+        self.available_medicines_table.clearSelection()
 
     def update_cart_display(self):
         """Refreshes the cart table with current cart items."""

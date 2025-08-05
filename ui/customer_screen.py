@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QApplication
 )
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt, pyqtSignal # Import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal # Ensure pyqtSignal is imported
 from models.customer import Customer
 
 class CustomerScreen(QWidget):
@@ -35,6 +35,7 @@ class CustomerScreen(QWidget):
             QFrame {
                 background-color: #FFFFFF;
                 border-radius: 15px;
+                /* Removed box-shadow */
             }
             QLabel {
                 font-size: 13px;
@@ -90,6 +91,7 @@ class CustomerScreen(QWidget):
             QFrame {
                 background-color: #FFFFFF;
                 border-radius: 15px;
+                /* Removed box-shadow */
             }
             QLineEdit {
                 border: 1px solid #cccccc;
