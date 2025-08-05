@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QDoubleValidator # Import QDoubleValidator for numeric input
 from PyQt6.QtCore import Qt, QStringListModel, pyqtSignal
 import json
+from datetime import datetime # Import datetime for invoice date
 
 
 class BillingScreen(QWidget):
@@ -188,7 +189,7 @@ class BillingScreen(QWidget):
         cart_buttons_layout.addStretch()
         cart_layout.addLayout(cart_buttons_layout)
 
-        # --- NEW: Subtotal, Discount, Tax, and Grand Total ---
+        # --- Subtotal, Discount, Tax, and Grand Total ---
         cart_layout.addSpacing(15) # Add spacing before totals
 
         # Subtotal
@@ -250,22 +251,20 @@ class BillingScreen(QWidget):
         grand_total_layout.addWidget(self.grand_total_amount_label)
         cart_layout.addLayout(grand_total_layout)
 
-        # Original Total Amount Label (now unused, but keeping for reference if needed)
-        # total_layout = QHBoxLayout()
-        # total_layout.addStretch()
-        # total_label = QLabel("Total Amount:")
-        # total_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
-        # self.total_amount_label = QLabel("0.00")
-        # self.total_amount_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
-        # self.total_amount_label.setStyleSheet("color: #28a745;")
-        # total_layout.addWidget(total_label)
-        # total_layout.addWidget(self.total_amount_label)
-        # cart_layout.addLayout(total_layout)
-
+        # --- NEW: Process Sale and Print Invoice Buttons ---
+        process_print_buttons_layout = QHBoxLayout()
+        process_print_buttons_layout.addStretch() # Push buttons to the right
 
         self.process_sale_button = self._create_button("Process Sale", "#28a745")
         self.process_sale_button.clicked.connect(self.process_sale)
-        cart_layout.addWidget(self.process_sale_button)
+        process_print_buttons_layout.addWidget(self.process_sale_button)
+
+        self.print_invoice_button = self._create_button("🖨️ Print Invoice", "#17a2b8") # A new button
+        self.print_invoice_button.clicked.connect(self._print_invoice)
+        process_print_buttons_layout.addWidget(self.print_invoice_button)
+
+        cart_layout.addLayout(process_print_buttons_layout)
+
 
         main_layout.addWidget(cart_frame)
 
@@ -586,13 +585,76 @@ class BillingScreen(QWidget):
         self.sales_history_table.resizeColumnsToContents()
         self.sales_history_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
+    def _generate_invoice_content(self):
+        """Generates the detailed invoice content as a formatted string."""
+        if not self.cart_items:
+            return "No items in cart to generate an invoice."
+
+        # Pharmacy Details (Placeholder - replace with actual details)
+        invoice_content = "--- PharmaCare Invoice ---\n"
+        invoice_content += "Pharmacy Name: PharmaCare\n"
+        invoice_content += "Address: 123 Health St, Wellness City\n"
+        invoice_content += "Contact: +92 3XX XXXXXXX | info@pharmacare.com\n"
+        invoice_content += f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        invoice_content += "--------------------------\n\n"
+
+        # Customer Details
+        if self.selected_customer:
+            invoice_content += f"Customer: {self.selected_customer.name}\n"
+            if self.selected_customer.phone:
+                invoice_content += f"Phone: {self.selected_customer.phone}\n"
+            if self.selected_customer.email:
+                invoice_content += f"Email: {self.selected_customer.email}\n"
+            invoice_content += "\n"
+        else:
+            invoice_content += "Customer: Walk-in Customer\n\n"
+
+        # Items Sold
+        invoice_content += "{:<25} {:>10} {:>8} {:>12}\n".format("Medicine", "Price", "Qty", "Subtotal")
+        invoice_content += "-" * 60 + "\n"
+        for item in self.cart_items:
+            invoice_content += "{:<25} {:>10.2f} {:>8} {:>12.2f}\n".format(
+                item["name"], item["price"], item["qty"], item["subtotal"]
+            )
+        invoice_content += "-" * 60 + "\n"
+
+        # Summary of Charges
+        subtotal = sum(item["subtotal"] for item in self.cart_items)
+        discount_amount = subtotal * (self.discount_percentage / 100.0)
+        amount_after_discount = subtotal - discount_amount
+        tax_amount = amount_after_discount * (self.tax_percentage / 100.0)
+        grand_total = amount_after_discount + tax_amount
+
+        invoice_content += f"Subtotal: {'':<35} {subtotal:>10.2f}\n"
+        invoice_content += f"Discount ({self.discount_percentage:.2f}%): {'':<28} -{discount_amount:>10.2f}\n"
+        invoice_content += f"Tax ({self.tax_percentage:.2f}%): {'':<33} +{tax_amount:>10.2f}\n"
+        invoice_content += f"Grand Total: {'':<34} {grand_total:>10.2f}\n"
+        invoice_content += "--------------------------\n"
+        invoice_content += "Thank you for your purchase!\n"
+        invoice_content += "--------------------------"
+
+        return invoice_content
+
+    def _print_invoice(self):
+        """Displays the generated invoice content in a message box."""
+        invoice_text = self._generate_invoice_content()
+        self.show_message("Printable Invoice", invoice_text)
+        # For actual printing, you would use QPrintDialog and QPrinter here.
+        # Example (conceptual, requires more setup):
+        # printer = QPrinter()
+        # print_dialog = QPrintDialog(printer, self)
+        # if print_dialog.exec() == QPrintDialog.DialogCode.Accepted:
+        #     document = QTextDocument()
+        #     document.setPlainText(invoice_text)
+        #     document.print(printer)
+
     def show_message(self, title, message):
         """Displays an information or error message box."""
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle(title)
         msg_box.setText(message)
         msg_box.setIcon(
-            QMessageBox.Icon.Information if "Success" in title or "Complete" in title else QMessageBox.Icon.Warning)
+            QMessageBox.Icon.Information if "Success" in title or "Complete" in title or "Invoice" in title else QMessageBox.Icon.Warning)
         msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg_box.setStyleSheet("""
             QMessageBox {

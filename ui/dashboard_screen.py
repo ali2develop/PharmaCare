@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QStackedWidget,
     QFrame, QSizePolicy, QApplication
 )
-from PyQt6.QtGui import QFont, QIcon, QPixmap
+from PyQt6.QtGui import QFont, QIcon, QPixmap  # Ensure QPixmap is imported
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
 # Import screens
@@ -13,7 +13,8 @@ from ui.medicine_screen import MedicineScreen
 from ui.customer_screen import CustomerScreen
 from ui.billing_screen import BillingScreen
 from ui.settings_screen import SettingsScreen
-from ui.reports_screen import ReportsScreen # NEW: Import ReportsScreen
+from ui.reports_screen import ReportsScreen
+
 
 class DashboardScreen(QWidget):
     """
@@ -21,12 +22,13 @@ class DashboardScreen(QWidget):
     It features a sidebar for navigation and a main content area
     managed by a QStackedWidget.
     """
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PharmaCare - Dashboard")
-        self.app_signals = None # Will be set by MainWindow
-        self.db_manager = None  # Will be set by MainWindow and passed to sub-screens
-        self.current_user = None # Will store logged-in user info
+        self.app_signals = None
+        self.db_manager = None
+        self.current_user = None
 
         self.setup_ui()
 
@@ -35,12 +37,12 @@ class DashboardScreen(QWidget):
         Sets up the main layout of the dashboard, including the sidebar and content area.
         """
         main_h_layout = QHBoxLayout(self)
-        main_h_layout.setContentsMargins(0, 0, 0, 0) # No margins for the main layout
-        main_h_layout.setSpacing(0) # No spacing between sidebar and content
+        main_h_layout.setContentsMargins(0, 0, 0, 0)
+        main_h_layout.setSpacing(0)
 
         # --- Sidebar ---
         self.sidebar_frame = QFrame(self)
-        self.sidebar_frame.setFixedWidth(250) # Fixed width for the sidebar
+        self.sidebar_frame.setFixedWidth(250)
         self.sidebar_frame.setStyleSheet("""
             QFrame {
                 background-color: #2c3e50; /* Dark blue-gray */
@@ -84,12 +86,28 @@ class DashboardScreen(QWidget):
         sidebar_layout.setSpacing(0)
         sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # App Logo/Name at the top of the sidebar
-        app_logo_label = QLabel("PharmaCare", self.sidebar_frame)
-        app_logo_label.setFont(QFont("Arial", 24, QFont.Weight.Bold))
-        app_logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        app_logo_label.setStyleSheet("color: #28a745; padding: 20px 0; background-color: #34495e;") # Green accent
-        sidebar_layout.addWidget(app_logo_label)
+        # --- App Logo/Name at the top of the sidebar (NOW IMAGE LOGO) ---
+        self.app_logo_label = QLabel(
+            self.sidebar_frame)  # Changed to self.app_logo_label for potential future reference
+
+        # Load the image
+        pixmap = QPixmap("assets/icon.png")
+        if pixmap.isNull():
+            print("Error: Could not load assets/icon.png. Ensure the path is correct.")
+            # Fallback to text if image fails to load
+            self.app_logo_label.setText("PharmaCare")
+            self.app_logo_label.setFont(QFont("Arial", 24, QFont.Weight.Bold))
+        else:
+            # Scale the pixmap to fit within a certain size while maintaining aspect ratio
+            scaled_pixmap = pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio,
+                                          Qt.TransformationMode.SmoothTransformation)
+            self.app_logo_label.setPixmap(scaled_pixmap)
+            self.app_logo_label.setFixedSize(scaled_pixmap.size())  # Set label size to pixmap size
+
+        self.app_logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Keep the existing padding and background color for the logo area
+        self.app_logo_label.setStyleSheet("padding: 20px 0; background-color: #34495e;")
+        sidebar_layout.addWidget(self.app_logo_label)
         sidebar_layout.addSpacing(20)
 
         # User Info Section (placeholder)
@@ -104,23 +122,22 @@ class DashboardScreen(QWidget):
         sidebar_layout.addWidget(self.user_email_label)
         sidebar_layout.addSpacing(30)
 
-
         # Navigation Buttons
         self.dashboard_button = self._create_sidebar_button("📊 Dashboard", "dashboard")
         self.medicines_button = self._create_sidebar_button("💊 Medicines", "medicines")
         self.customers_button = self._create_sidebar_button("👥 Customers", "customers")
         self.billing_button = self._create_sidebar_button("🧾 Billing", "billing")
-        self.reports_button = self._create_sidebar_button("📈 Reports", "reports") # NEW: Reports Button
+        self.reports_button = self._create_sidebar_button("📈 Reports", "reports")
         self.settings_button = self._create_sidebar_button("⚙️ Settings", "settings")
 
         sidebar_layout.addWidget(self.dashboard_button)
         sidebar_layout.addWidget(self.medicines_button)
         sidebar_layout.addWidget(self.customers_button)
         sidebar_layout.addWidget(self.billing_button)
-        sidebar_layout.addWidget(self.reports_button) # NEW: Add Reports Button to layout
+        sidebar_layout.addWidget(self.reports_button)
         sidebar_layout.addWidget(self.settings_button)
 
-        sidebar_layout.addStretch() # Pushes buttons to the top
+        sidebar_layout.addStretch()  # Pushes buttons to the top
 
         # Logout Button
         self.logout_button = self._create_sidebar_button("🚪 Logout", "logout")
@@ -143,28 +160,27 @@ class DashboardScreen(QWidget):
         self.logout_button.clicked.connect(self._emit_logout)
         sidebar_layout.addWidget(self.logout_button)
 
-
         main_h_layout.addWidget(self.sidebar_frame)
 
         # --- Content Area ---
         self.content_stacked_widget = QStackedWidget(self)
-        self.content_stacked_widget.setStyleSheet("background-color: #f8f9fa;") # Light background for content
+        self.content_stacked_widget.setStyleSheet("background-color: #f8f9fa;")
 
         # Create instances of content screens
         self.dashboard_content = DashboardContentScreen()
         self.medicines_content = MedicineScreen()
         self.customers_content = CustomerScreen()
         self.billing_content = BillingScreen()
-        self.reports_content = ReportsScreen() # NEW: Instantiate ReportsScreen
+        self.reports_content = ReportsScreen()
         self.settings_content = SettingsScreen()
 
         # Add content screens to the stacked widget (adjusting indices)
-        self.content_stacked_widget.addWidget(self.dashboard_content) # Index 0
-        self.content_stacked_widget.addWidget(self.medicines_content) # Index 1
-        self.content_stacked_widget.addWidget(self.customers_content) # Index 2
-        self.content_stacked_widget.addWidget(self.billing_content)   # Index 3
-        self.content_stacked_widget.addWidget(self.reports_content)   # NEW: Add ReportsScreen (Index 4)
-        self.content_stacked_widget.addWidget(self.settings_content) # Index 5 (shifted from 4)
+        self.content_stacked_widget.addWidget(self.dashboard_content)  # Index 0
+        self.content_stacked_widget.addWidget(self.medicines_content)  # Index 1
+        self.content_stacked_widget.addWidget(self.customers_content)  # Index 2
+        self.content_stacked_widget.addWidget(self.billing_content)  # Index 3
+        self.content_stacked_widget.addWidget(self.reports_content)  # Index 4
+        self.content_stacked_widget.addWidget(self.settings_content)  # Index 5
 
         main_h_layout.addWidget(self.content_stacked_widget)
 
@@ -173,36 +189,30 @@ class DashboardScreen(QWidget):
         self.medicines_button.clicked.connect(lambda: self.switch_screen(1, self.medicines_button))
         self.customers_button.clicked.connect(lambda: self.switch_screen(2, self.customers_button))
         self.billing_button.clicked.connect(lambda: self.switch_screen(3, self.billing_button))
-        self.reports_button.clicked.connect(lambda: self.switch_screen(4, self.reports_button)) # NEW: Connect Reports button
-        self.settings_button.clicked.connect(lambda: self.switch_screen(5, self.settings_button)) # Adjusted index for settings
+        self.reports_button.clicked.connect(lambda: self.switch_screen(4, self.reports_button))
+        self.settings_button.clicked.connect(lambda: self.switch_screen(5, self.settings_button))
 
         # Set initial active button and screen
         self.active_button = None
-        self.switch_screen(0, self.dashboard_button) # Show Dashboard content initially
+        self.switch_screen(0, self.dashboard_button)
 
         # --- Connect data change signals for auto-updates ---
-        # Connect medicine and customer data changes to billing screen refresh
         self.medicines_content.data_changed.connect(self.billing_content.load_available_medicines)
         self.customers_content.data_changed.connect(self.billing_content.load_available_customers)
 
-        # Connect data changes (medicine, customer, sales) to dashboard content refresh
         self.medicines_content.data_changed.connect(self.dashboard_content.load_dashboard_stats)
         self.customers_content.data_changed.connect(self.dashboard_content.load_dashboard_stats)
         self.billing_content.sale_processed.connect(self.dashboard_content.load_dashboard_stats)
 
-
     def _create_sidebar_button(self, text, object_name):
         """Helper to create a styled sidebar button."""
         button = QPushButton(text, self.sidebar_frame)
-        button.setObjectName(object_name) # Set object name for specific styling if needed
-        button.setCheckable(True) # Make buttons checkable for active state
+        button.setObjectName(object_name)
+        button.setCheckable(True)
         return button
 
     def _create_placeholder_screen(self, text):
-        """Helper to create a simple placeholder widget for content areas.
-        This method is no longer strictly needed if DashboardContentScreen is imported
-        and used directly, but kept for compatibility with the original structure if desired.
-        """
+        """Helper to create a simple placeholder widget for content areas."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         label = QLabel(text)
@@ -221,22 +231,20 @@ class DashboardScreen(QWidget):
         self.content_stacked_widget.setCurrentIndex(index)
 
         # If the dashboard screen is being shown, load its stats
-        if index == 0: # Index 0 is the dashboard_content
+        if index == 0:
             self.dashboard_content.load_dashboard_stats()
         # If the reports screen is being shown, generate its default report
-        elif index == 4: # Index 4 is the reports_content
+        elif index == 4:
             self.reports_content.generate_report()
-
 
         # Update button styles
         if self.active_button:
-            self.active_button.setChecked(False) # Uncheck previous active button
-        clicked_button.setChecked(True) # Check the newly clicked button
+            self.active_button.setChecked(False)
+        clicked_button.setChecked(True)
         self.active_button = clicked_button
 
     def _emit_logout(self):
         """Emits a signal to request application logout."""
-        # Assuming app_signals is set by MainWindow and has a logout_requested signal
         if self.app_signals:
             self.app_signals.logout_requested.emit()
 
@@ -255,7 +263,7 @@ class DashboardScreen(QWidget):
         self.medicines_content.set_db_manager(db_manager)
         self.customers_content.set_db_manager(db_manager)
         self.billing_content.set_db_manager(db_manager)
-        self.reports_content.set_db_manager(db_manager) # NEW: Pass DBManager to ReportsScreen
+        self.reports_content.set_db_manager(db_manager)
         self.settings_content.db_manager = db_manager
 
         # Ensure dashboard stats are loaded when DBManager is first set
