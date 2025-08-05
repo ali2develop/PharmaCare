@@ -2,18 +2,28 @@
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QFrame, QSizePolicy, QToolButton, QMessageBox
+    QPushButton, QFrame, QSizePolicy, QToolButton, QMessageBox, QCompleter  # Added QCompleter
 )
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt, pyqtSignal, QObject
+from PyQt6.QtCore import Qt, pyqtSignal, QObject, QStringListModel  # Added QStringListModel
+import bcrypt
+
+# Import the User model and DBManager
+from models.user import User
+from database.db_manager import DBManager
+
 
 class LoginScreen(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PharmaCare - Login")
-        self.app_signals = None # Will be set by MainWindow
-        self.setup_ui()
+        self.app_signals = None
+        self.db_manager = None
         self.password_visible = False
+        self.completer_model = QStringListModel()  # Initialize completer model
+        self.completer = QCompleter(self)  # Initialize QCompleter
+        self.setup_ui()
+        self.setup_completer()  # Call setup_completer after setup_ui
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -33,11 +43,9 @@ class LoginScreen(QWidget):
         login_card_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         card_layout = QVBoxLayout(login_card_frame)
-        # *** CRITICAL CHANGE: Explicitly align content to the top and center horizontally ***
         card_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         card_layout.setSpacing(15)
-        # *** CRITICAL CHANGE: Increased top margin significantly to prevent clipping ***
-        card_layout.setContentsMargins(60, 150, 60, 60) # Adjusted top margin from 120 to 150
+        card_layout.setContentsMargins(60, 150, 60, 60)
 
         # --- Top Section: Title and Tagline ---
         app_name_label = QLabel("PharmaCare", self)
@@ -202,12 +210,25 @@ class LoginScreen(QWidget):
         self.login_button.clicked.connect(self.attempt_login)
         card_layout.addWidget(self.login_button)
 
-        # *** CRITICAL CHANGE: Add stretch to push content to the top ***
         card_layout.addStretch()
 
         main_layout.addWidget(login_card_frame)
 
         self.setStyleSheet("background-color: #f0f2f5;")
+
+    def setup_completer(self):
+        """Sets up the QCompleter for the email input field."""
+        self.completer.setModel(self.completer_model)
+        self.completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.completer.setFilterMode(Qt.MatchFlag.MatchContains)  # Allows suggestions anywhere in the string
+        self.email_input.setCompleter(self.completer)
+
+    def load_email_suggestions(self):
+        """Loads email suggestions from the database into the completer model."""
+        if self.db_manager:
+            emails = self.db_manager.get_login_emails()
+            self.completer_model.setStringList(emails)
+            print("Loaded email suggestions:", emails)  # For debugging
 
     def toggle_password_visibility(self):
         if self.password_visible:
@@ -219,7 +240,7 @@ class LoginScreen(QWidget):
         self.password_visible = not self.password_visible
 
     def show_login_tab(self):
-        """Updates the tab button styles to show 'Login' as active."""
+        """Updates the tab button styles to show 'Login' as active and loads email suggestions."""
         self.login_tab_button.setStyleSheet("""
             QPushButton {
                 background-color: #007bff;
@@ -244,6 +265,7 @@ class LoginScreen(QWidget):
                 background-color: #cccccc;
             }
         """)
+        self.load_email_suggestions()  # Load suggestions when login tab is shown
 
     def _emit_navigate_to_signup(self):
         """Emits a signal to request navigation to the signup screen."""
@@ -251,17 +273,45 @@ class LoginScreen(QWidget):
             self.app_signals.navigate_to_signup.emit()
 
     def attempt_login(self):
-        email = self.email_input.text()
+        """
+        Handles the Login button click event.
+        Retrieves user input and attempts to authenticate the user against the database.
+        """
+        email = self.email_input.text().strip()
         password = self.password_input.text()
+
         if not email or not password:
             self.show_message("Login Error", "Please enter both email and password.")
             return
 
-        if email == "test@example.com" and password == "password123":
-            self.show_message("Login Success", "Welcome to PharmaCare Dashboard!")
-            if self.app_signals:
-                self.app_signals.login_successful.emit() # Emit signal on successful login
+        # Check if DBManager instance is available
+        if not self.db_manager:
+            self.show_message("Database Error", "Database manager not initialized.")
+            return
+
+        # Attempt to retrieve user from the database
+        user_data = self.db_manager.get_user_by_email(email)
+
+        if user_data:
+            # User found, now verify password
+            stored_hashed_password = user_data[3].encode('utf-8')  # Hashed password is at index 3
+            if bcrypt.checkpw(password.encode('utf-8'), stored_hashed_password):
+                # Login successful, emit signal with user's full name and email
+                self.show_message("Login Success", f"Welcome back, {user_data[1]}!")
+
+                # New: Add email to login history
+                self.db_manager.add_login_email(email)
+                self.load_email_suggestions()  # Refresh completer model to include new email
+
+                # Clear fields after successful login
+                self.email_input.clear()
+                self.password_input.clear()
+                if self.app_signals:
+                    self.app_signals.login_successful.emit(user_data[1], user_data[2])
+            else:
+                self.show_message("Login Failed", "Invalid email or password.")
         else:
+            # User not found
             self.show_message("Login Failed", "Invalid email or password.")
 
     def show_message(self, title, message):
@@ -293,9 +343,22 @@ class LoginScreen(QWidget):
         """)
         msg_box.exec()
 
+
 if __name__ == "__main__":
     import sys
+    from database.db_manager import DBManager
+    from models.user import User  # Import User for standalone test
+
     app = QApplication(sys.argv)
     login_screen = LoginScreen()
+    # For standalone test, create a dummy DBManager and add some emails
+    test_db_manager = DBManager("test_login_history.db")
+    test_db_manager.add_user(User("Test User", "test@example.com", "password123"))
+    test_db_manager.add_user(User("Another User", "another@domain.com", "securepass"))
+    test_db_manager.add_login_email("test@example.com")
+    test_db_manager.add_login_email("previous@email.com")
+    login_screen.db_manager = test_db_manager
+    login_screen.load_email_suggestions()  # Manually load for standalone test
+
     login_screen.showMaximized()
     sys.exit(app.exec())

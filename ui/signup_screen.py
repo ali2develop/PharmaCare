@@ -7,11 +7,16 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 
+# Import the User model and DBManager
+from models.user import User
+from database.db_manager import DBManager
+
 class SignUpScreen(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PharmaCare - Sign Up")
         self.app_signals = None # Will be set by MainWindow
+        self.db_manager = None  # Will be set by MainWindow
         self.setup_ui()
         self.password_visible_signup = False
         self.password_visible_confirm = False
@@ -36,13 +41,7 @@ class SignUpScreen(QWidget):
         card_layout = QVBoxLayout(signup_card_frame)
         card_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         card_layout.setSpacing(15)
-        # Adjusted top margin for the signup page now that the name is removed,
-        # ensuring the "Create Account" text is well-positioned.
         card_layout.setContentsMargins(60, 80, 60, 60) # Adjusted top margin
-
-        # --- Top Section: Application Name and Tagline REMOVED ---
-        # app_name_label and tagline_label are removed from here.
-        # The space is now managed by the increased top margin in card_layout.setContentsMargins.
 
         tab_layout = QHBoxLayout()
         tab_layout.setSpacing(0)
@@ -138,7 +137,7 @@ class SignUpScreen(QWidget):
                 border: 1px solid #cccccc;
                 border-radius: 10px;
                 padding: 12px;
-                background-color: #fm8f8f8;
+                background-color: #f8f8f8;
             }
             QLineEdit:focus {
                 border: 2px solid #007bff;
@@ -314,8 +313,12 @@ class SignUpScreen(QWidget):
         """)
 
     def attempt_signup(self):
-        full_name = self.fullname_input.text()
-        email = self.email_input.text()
+        """
+        Handles the Create Account button click event.
+        Retrieves user input and attempts to register the user in the database.
+        """
+        full_name = self.fullname_input.text().strip()
+        email = self.email_input.text().strip()
         password = self.password_input.text()
         confirm_password = self.confirm_password_input.text()
 
@@ -329,8 +332,28 @@ class SignUpScreen(QWidget):
 
         if len(password) < 6:
             self.show_message("Sign Up Error", "Password must be at least 6 characters long.")
-        else:
-            self.show_message("Sign Up Success", f"Account created for {full_name} with email {email}!")
+            return
+
+        # Check if DBManager instance is available
+        if not self.db_manager:
+            self.show_message("Database Error", "Database manager not initialized.")
+            return
+
+        # Create a User object
+        new_user = User(full_name=full_name, email=email, password=password)
+
+        # Attempt to add user to the database
+        if self.db_manager.add_user(new_user):
+            self.show_message("Sign Up Success", f"Account created for {full_name}! You can now log in.")
+            # Clear fields after successful signup
+            self.fullname_input.clear()
+            self.email_input.clear()
+            self.password_input.clear()
+            self.confirm_password_input.clear()
+            # Navigate to login screen after successful signup
+            if self.app_signals:
+                self.app_signals.navigate_to_login.emit()
+        # Error messages are handled by DBManager's show_error_message
 
     def show_message(self, title, message):
         msg_box = QMessageBox(self)
